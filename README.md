@@ -1,6 +1,6 @@
 # langchain-onnxruntime-genai
 
-This package contains the LangChain integration with OnnxruntimeGenai
+This package contains the LangChain integration with OnnxruntimeGenai.
 
 ## Installation
 
@@ -8,9 +8,7 @@ This package contains the LangChain integration with OnnxruntimeGenai
 pip install -U langchain-onnxruntime-genai
 ```
 
-And you should configure credentials by setting the following environment variables:
-
-* TODO: fill this out
+* No specific credentials are required, but you must install the appropriate execution provider package based on your hardware.
 
 ## Chat Models
 
@@ -19,27 +17,65 @@ And you should configure credentials by setting the following environment variab
 ```python
 from langchain_onnxruntime_genai import ChatOnnxruntimeGenai
 
-llm = ChatOnnxruntimeGenai()
+llm = ChatOnnxruntimeGenai(model="phi3", model_path="/path/to/onnx/model")
 llm.invoke("Sing a ballad of LangChain.")
 ```
 
-## Embeddings
+## Execution Providers
 
-`OnnxruntimeGenaiEmbeddings` class exposes embeddings from OnnxruntimeGenai.
+OnnxruntimeGenai supports multiple execution providers, including CPU, CUDA, and DirectML. You must install the corresponding package based on your selected execution provider:
 
-```python
-from langchain_onnxruntime_genai import OnnxruntimeGenaiEmbeddings
+* **CPU**: `pip install --pre onnxruntime-genai`
+* **CUDA**: `pip install --pre onnxruntime-genai-cuda` (Requires CUDA Toolkit. More details: [OnnxruntimeGenai CUDA Installation](https://onnxruntime.ai/docs/genai/howto/install.html#cuda))
+* **DirectML**: `pip install --pre onnxruntime-genai-directml`
 
-embeddings = OnnxruntimeGenaiEmbeddings()
-embeddings.embed_query("What is the meaning of life?")
-```
+## Model Configuration
 
-## LLMs
-`OnnxruntimeGenaiLLM` class exposes LLMs from OnnxruntimeGenai.
+You can instantiate the chat model with various parameters:
 
 ```python
-from langchain_onnxruntime_genai import OnnxruntimeGenaiLLM
-
-llm = OnnxruntimeGenaiLLM()
-llm.invoke("The meaning of life is")
+chat_model = ChatOnnxruntimeGenai(
+    model="phi3",
+    model_path="/path/to/onnx/model",
+    temperature=0.8,
+    max_tokens=256,
+    execution_provider="CPU"
+)
 ```
+
+### Supported Parameters:
+
+* `model`: Name of the ONNX model.
+* `model_path`: Path to the ONNX model.
+* `temperature`: Sampling temperature.
+* `max_tokens`: Maximum tokens to generate.
+* `execution_provider`: Execution provider (CPU, CUDA, DirectML).
+* `top_p`, `top_k`, `repeat_penalty`, etc.
+
+## Streaming
+
+You can stream responses from the model:
+
+```python
+messages = [
+    ("system", "You are a helpful translator. Translate the user sentence to French."),
+    ("human", "I love programming.")
+]
+
+for chunk in chat_model.stream(messages):
+    print(chunk)
+```
+
+This will output streamed responses in chunks:
+
+```python
+AIMessageChunk(content='J')
+AIMessageChunk(content="'adore")
+AIMessageChunk(content=' la')
+AIMessageChunk(content=' programmation')
+AIMessageChunk(content='.')
+```
+
+## Error Handling
+
+Ensure that the `onnxruntime-genai` package is installed before using this integration. If the model fails to load, verify that the model path and execution provider are correctly set.
