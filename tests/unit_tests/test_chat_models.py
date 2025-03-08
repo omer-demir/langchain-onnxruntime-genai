@@ -1,23 +1,30 @@
 """Test chat model integration."""
 
-from typing import Type
+from unittest.mock import MagicMock
 
-from langchain_tests.unit_tests import ChatModelUnitTests
+import pytest
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.outputs import ChatResult
 
 from langchain_onnxruntime_genai.chat_models import ChatOnnxruntimeGenai
 
 
-class TestChatOnnxruntimeGenaiUnit(ChatModelUnitTests):
-    @property
-    def chat_model_class(self) -> Type[ChatOnnxruntimeGenai]:
-        return ChatOnnxruntimeGenai
-
-    @property
-    def chat_model_params(self) -> dict:
-        # These should be parameters used to initialize your integration for testing
-        return {
-            "model_path": "tests/unit_tests/test_data/bird-brain-001.onnx",
-            "model": "bird-brain-001",
-            "temperature": 0,
-            "parrot_buffer_length": 50,
-        }
+def test_to_chatml_format():
+    assert ChatOnnxruntimeGenai._to_chatml_format(
+        None, HumanMessage(content="Hello")
+    ) == {
+        "role": "user",
+        "content": "Hello",
+    }
+    assert ChatOnnxruntimeGenai._to_chatml_format(None, AIMessage(content="Hi")) == {
+        "role": "assistant",
+        "content": "Hi",
+    }
+    assert ChatOnnxruntimeGenai._to_chatml_format(
+        None, SystemMessage(content="System instruction")
+    ) == {
+        "role": "system",
+        "content": "System instruction",
+    }
+    with pytest.raises(TypeError):
+        ChatOnnxruntimeGenai._to_chatml_format(None, "Invalid message")

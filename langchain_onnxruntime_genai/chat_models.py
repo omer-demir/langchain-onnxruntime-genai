@@ -1,6 +1,6 @@
 """OnnxruntimeGenai chat models."""
 
-from typing import Any, Dict, Iterator, List, Optional, Self
+from typing import Any, Dict, Iterator, List, Optional
 
 from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
@@ -22,6 +22,7 @@ from langchain_core.outputs import (
 )
 from pydantic import Field, model_validator
 from transformers import AutoTokenizer
+from typing_extensions import Self
 
 from langchain_onnxruntime_genai.execution_providers import ExecutionProviders
 
@@ -134,6 +135,14 @@ class ChatOnnxruntimeGenai(BaseChatModel):
 
     """  # noqa: E501
 
+    onnx_model: Any = None  #: :meta private:
+
+    onnx_config: Any = None  #: :meta private:
+
+    tokenizer: Any = None  #: :meta private:
+
+    hf_tokenizer: Any = None  #: :meta private:
+
     model_name: str = Field(alias="model")
     """The name of the model"""
 
@@ -234,7 +243,7 @@ class ChatOnnxruntimeGenai(BaseChatModel):
             config.clear_providers()
             if self.execution_provider != ExecutionProviders.CPU:
                 config.append_provider(self.execution_provider)
-            self.model = Model(config)
+            self.onnx_model = Model(config)
             self.onnx_config = config
         except Exception as e:
             raise ValueError(
@@ -243,7 +252,7 @@ class ChatOnnxruntimeGenai(BaseChatModel):
             )
 
         try:
-            self.tokenizer = Tokenizer(self.model)
+            self.tokenizer = Tokenizer(self.onnx_model)
 
             # Tokenizer used for the chat template formatting
             self.hf_tokenizer = AutoTokenizer.from_pretrained(self.model_path)
@@ -272,9 +281,9 @@ class ChatOnnxruntimeGenai(BaseChatModel):
         model_params.update(kwargs)
 
         # Build generator params
-        params = GeneratorParams(self.model)
+        params = GeneratorParams(self.onnx_model)
         params.set_search_options(**model_params)
-        generator = Generator(self.model, params)
+        generator = Generator(self.onnx_model, params)
 
         # Append input token
         text_generations: list[str] = []
@@ -291,17 +300,14 @@ class ChatOnnxruntimeGenai(BaseChatModel):
                 token_count += 1
             if self.max_tokens and token_count >= self.max_tokens:
                 break
-
         text_generations.append(answer)
 
         # Delete generator to free-up memory
         del generator
+        
+        generations=[ChatGeneration(AIMessage(content=text)) for text in text_generations]
 
-        result = LLMResult(
-            generations=[[Generation(text=text)] for text in text_generations]
-        )
-
-        return self._to_chat_result(result)
+        return ChatResult(generations=generations)
 
     def _to_chat_prompt(
         self,
@@ -339,17 +345,6 @@ class ChatOnnxruntimeGenai(BaseChatModel):
 
         return {"role": role, "content": message.content}
 
-    def _to_chat_result(self, result: LLMResult) -> ChatResult:
-        chat_generations = []
-
-        for g in result.generations[0]:
-            chat_generation = ChatGeneration(
-                message=AIMessage(content=g.text), generation_info=g.generation_info
-            )
-            chat_generations.append(chat_generation)
-
-        return ChatResult(generations=chat_generations, llm_output=result.llm_output)
-
     def _stream(
         self,
         messages: List[BaseMessage],
@@ -370,9 +365,9 @@ class ChatOnnxruntimeGenai(BaseChatModel):
         model_params.update(kwargs)
 
         # Build generator params
-        params = GeneratorParams(self.model)
+        params = GeneratorParams(self.onnx_model)
         params.set_search_options(**model_params)
-        generator = Generator(self.model, params)
+        generator = Generator(self.onnx_model, params)
 
         # Append input token
         generator.append_tokens(input_token)
