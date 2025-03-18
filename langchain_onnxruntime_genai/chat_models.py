@@ -152,7 +152,10 @@ class ChatOnnxruntimeGenai(BaseChatModel):
     model_path: str = Field(alias="model_path")
     """The onnx path of the model folder"""
 
-    max_tokens: Optional[int] = 256
+    max_tokens: Optional[int] = 4096
+    """The maximum context size of model."""
+
+    max_length: Optional[int] = 256
     """The maximum number of tokens to generate."""
 
     temperature: Optional[float] = 0.8
@@ -200,7 +203,7 @@ class ChatOnnxruntimeGenai(BaseChatModel):
         """
         return {
             "do_sample": self.do_sample,
-            "max_length": self.max_tokens,
+            "max_length": self.max_length,
             "top_k": self.top_k,
             "top_p": self.top_p,
             "temperature": self.temperature,
@@ -239,11 +242,11 @@ class ChatOnnxruntimeGenai(BaseChatModel):
             )
 
         try:
-            config = Config(self.model_path)
+            config = Config(str(self.model_path))
             config.clear_providers()
             if self.execution_provider != ExecutionProviders.CPU:
                 config.append_provider(self.execution_provider)
-            self.onnx_model = Model(config)
+            self.onnx_model = Model(str(self.model_path))
             self.onnx_config = config
         except Exception as e:
             raise ValueError(
@@ -304,8 +307,10 @@ class ChatOnnxruntimeGenai(BaseChatModel):
 
         # Delete generator to free-up memory
         del generator
-        
-        generations=[ChatGeneration(AIMessage(content=text)) for text in text_generations]
+
+        generations = [
+            ChatGeneration(message=AIMessage(content=text)) for text in text_generations
+        ]
 
         return ChatResult(generations=generations)
 
@@ -359,7 +364,7 @@ class ChatOnnxruntimeGenai(BaseChatModel):
         # Encode prompts
         llm_input = self._to_chat_prompt(messages)
         input_token = self.tokenizer.encode(llm_input)
-        tokenizer_stream = self.tokenizer.create_stream()
+        # tokenizer_stream = self.tokenizer.create_stream()
 
         model_params = self._default_params
         model_params.update(kwargs)
@@ -371,11 +376,18 @@ class ChatOnnxruntimeGenai(BaseChatModel):
 
         # Append input token
         generator.append_tokens(input_token)
+        token_count = 0
 
         while not generator.is_done():
             generator.generate_next_token()
             new_token = generator.get_next_tokens()[0]
-            generated_token = tokenizer_stream.decode(new_token)
+
+            if new_token != self.hf_tokenizer.eos_token_id:
+                generated_token = self.tokenizer.decode(new_token)
+                token_count += 1
+            if self.max_tokens and token_count >= self.max_tokens:
+                break
+
             chunk = ChatGenerationChunk(message=AIMessageChunk(content=generated_token))
 
             if run_manager:
